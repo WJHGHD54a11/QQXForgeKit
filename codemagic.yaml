@@ -2,7 +2,7 @@ workflows:
 
   ios-native-quick-start:
 
-    name: AQXQ26
+    name: QQXForgeKit
 
     max_build_duration: 120
 
@@ -20,19 +20,19 @@ workflows:
 
         distribution_type: app_store
 
-        bundle_identifier: com.laozumu.rls
+        bundle_identifier: com.QQXForgeKit.relse
 
 
       vars:
 
-        BUNDLE_ID: com.laozumu.rls
+        BUNDLE_ID: com.QQXForgeKit.relse
 
         # 工程不用 CocoaPods，没有 .xcworkspace，直接用 .xcodeproj
-        XCODE_PROJECT: "AQXQ26/AQXQ26.xcodeproj"
+        XCODE_PROJECT: "QQXForgeKit/QQXForgeKit.xcodeproj"
 
-        XCODE_SCHEME: "AQXQ26"
+        XCODE_SCHEME: "QQXForgeKit"
 
-        APP_STORE_APPLE_ID: 6822644050
+        APP_STORE_APPLE_ID: 6825042562
 
 
       xcode: latest
