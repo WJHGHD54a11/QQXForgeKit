@@ -21,6 +21,15 @@ NS_ASSUME_NONNULL_BEGIN
                             includePhotos:(BOOL)includePhotos
                                     error:(NSString * _Nullable * _Nullable)error;
 
+#pragma mark Field report
+
+/// Localized list of what is missing before a field report PDF can be generated; empty when ready.
++ (NSArray<NSString *> *)missingDataForFieldReport:(NSManagedObject *)report;
+
+/// Renders the saved field report to url (an existing file there is replaced).
+/// Shares page furniture, text flow and photo layout with the inspection report.
++ (BOOL)generateForFieldReport:(NSManagedObject *)report toURL:(NSURL *)url error:(NSString * _Nullable * _Nullable)error;
+
 @end
 
 NS_ASSUME_NONNULL_END

@@ -5,6 +5,7 @@
 
 #import "QQXStore.h"
 #import "QQXLang.h"
+#import "QQXTheme.h"
 
 @interface QQXStore ()
 @property (nonatomic, strong) NSPersistentContainer *container;
@@ -94,24 +95,28 @@
     return NO;
 }
 
-/// Photo references held by the object and everything its cascade rules will delete.
-- (void)collectPhotos:(NSManagedObject *)o into:(NSMutableSet *)set {
-    if (o.entity.attributesByName[@"photo"]) {
-        NSString *p = [o valueForKey:@"photo"];
-        if (p.length) [set addObject:p];
-    }
+/// File references held by the object and everything its cascade rules will delete.
+/// photos: Photos folder names; files: library files; pdfs: field report PDFs (app-internal copies).
+- (void)collectFiles:(NSManagedObject *)o photos:(NSMutableSet *)photos files:(NSMutableSet *)files pdfs:(NSMutableSet *)pdfs {
+    NSDictionary *attrs = o.entity.attributesByName;
+    if (attrs[@"photo"]) { NSString *p = [o valueForKey:@"photo"]; if (p.length) [photos addObject:p]; }
+    if (attrs[@"file"]) { NSString *p = [o valueForKey:@"file"]; if (p.length) [files addObject:p]; }
+    if (attrs[@"pdfFile"]) { NSString *p = [o valueForKey:@"pdfFile"]; if (p.length) [pdfs addObject:p]; }
     [o.entity.relationshipsByName enumerateKeysAndObjectsUsingBlock:^(NSString *name, NSRelationshipDescription *rel, BOOL *stop) {
         if (rel.deleteRule != NSCascadeDeleteRule) return;
-        for (NSManagedObject *child in [o valueForKey:name] ?: @[]) [self collectPhotos:child into:set];
+        for (NSManagedObject *child in [o valueForKey:name] ?: @[]) [self collectFiles:child photos:photos files:files pdfs:pdfs];
     }];
 }
 
 - (BOOL)deleteObject:(NSManagedObject *)object error:(NSString **)error {
-    NSMutableSet *photos = [NSMutableSet set];
-    [self collectPhotos:object into:photos];
+    NSMutableSet *photos = [NSMutableSet set], *files = [NSMutableSet set], *pdfs = [NSMutableSet set];
+    [self collectFiles:object photos:photos files:files pdfs:pdfs];
     [self.context deleteObject:object];
     if (![self save:error]) { [self.context rollback]; return NO; }
     for (NSString *name in photos) [self removePhotoIfUnused:name];
+    for (NSString *name in files) [self removeLibraryFileIfUnused:name];
+    // Only the app's own copy is removed; PDFs the user exported elsewhere are untouched.
+    for (NSString *name in pdfs) [[NSFileManager defaultManager] removeItemAtURL:[self reportPDFURL:name] error:nil];
     return YES;
 }
 
@@ -166,7 +171,7 @@
 
 - (NSSet<NSString *> *)referencedPhotos {
     NSMutableSet *set = [NSMutableSet set];
-    for (NSString *entity in @[@"Equipment", @"MaintenanceRecord", @"InspectionItem"]) {
+    for (NSString *entity in @[@"Equipment", @"MaintenanceRecord", @"InspectionItem", @"ReportPhoto"]) {
         NSFetchRequest *r = [NSFetchRequest fetchRequestWithEntityName:entity];
         r.predicate = [NSPredicate predicateWithFormat:@"photo != nil"];
         r.resultType = NSDictionaryResultType;
@@ -186,6 +191,12 @@
 
 - (void)sweepOrphanPhotos {
     if (self.startupError) return; // in-memory fallback: references are unknown, keep every file
+    // Library files left by an import that was interrupted before the item was saved.
+    NSMutableSet *libUsed = [NSMutableSet set];
+    for (NSManagedObject *d in [self fetch:@"Document" predicate:[NSPredicate predicateWithFormat:@"file != nil"] sort:nil]) [libUsed addObject:[d valueForKey:@"file"]];
+    for (NSString *f in [[NSFileManager defaultManager] contentsOfDirectoryAtPath:[self libraryDir].path error:nil]) {
+        if (![libUsed containsObject:f]) [[NSFileManager defaultManager] removeItemAtURL:[[self libraryDir] URLByAppendingPathComponent:f] error:nil];
+    }
     NSSet *used = [self referencedPhotos];
     NSArray *files = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:[self photoDir].path error:nil];
     for (NSString *f in files) {
@@ -193,6 +204,107 @@
             [[NSFileManager defaultManager] removeItemAtURL:[[self photoDir] URLByAppendingPathComponent:f] error:nil];
         }
     }
+}
+
+#pragma mark - Library files
+
+- (NSURL *)libraryDir {
+    NSURL *base = [[NSFileManager defaultManager] URLsForDirectory:NSApplicationSupportDirectory inDomains:NSUserDomainMask].firstObject;
+    NSURL *dir = [base URLByAppendingPathComponent:@"Library" isDirectory:YES];
+    [[NSFileManager defaultManager] createDirectoryAtURL:dir withIntermediateDirectories:YES attributes:nil error:nil];
+    return dir;
+}
+
+- (NSURL *)libraryFileURL:(NSString *)name {
+    return name.length ? [[self libraryDir] URLByAppendingPathComponent:name] : nil;
+}
+
+- (NSString *)importLibraryFile:(NSURL *)source error:(NSString **)error {
+    NSString *ext = source.pathExtension.lowercaseString;
+    NSString *name = [[NSUUID UUID].UUIDString stringByAppendingPathExtension:ext.length ? ext : @"dat"];
+    NSURL *dst = [[self libraryDir] URLByAppendingPathComponent:name];
+    // Files from the picker may be security-scoped (e.g. iCloud Drive).
+    BOOL scoped = [source startAccessingSecurityScopedResource];
+    __block NSError *e = nil;
+    __block BOOL ok = NO;
+    NSError *ce = nil;
+    [[[NSFileCoordinator alloc] init] coordinateReadingItemAtURL:source options:NSFileCoordinatorReadingWithoutChanges error:&ce byAccessor:^(NSURL *readURL) {
+        ok = [[NSFileManager defaultManager] copyItemAtURL:readURL toURL:dst error:&e];
+    }];
+    if (scoped) [source stopAccessingSecurityScopedResource];
+    NSDictionary *attrs = ok ? [[NSFileManager defaultManager] attributesOfItemAtPath:dst.path error:nil] : nil;
+    if (!ok || ce || [attrs fileSize] == 0) {
+        NSLog(@"[QQXStore] import failed: %@ %@", e, ce);
+        [[NSFileManager defaultManager] removeItemAtURL:dst error:nil];
+        if (error) *error = (ok && [attrs fileSize] == 0) ? QL(@"doc.err.emptyFile") : QL(@"doc.err.import");
+        return nil;
+    }
+    return name;
+}
+
+- (void)removeLibraryFileIfUnused:(NSString *)name {
+    if (name.length == 0 || self.startupError) return;
+    if ([self fetch:@"Document" predicate:[NSPredicate predicateWithFormat:@"file == %@", name] sort:nil].count) return;
+    [[NSFileManager defaultManager] removeItemAtURL:[self libraryFileURL:name] error:nil];
+}
+
+#pragma mark - Field report PDFs
+
+- (NSURL *)reportPDFURL:(NSString *)name {
+    NSURL *base = [[NSFileManager defaultManager] URLsForDirectory:NSApplicationSupportDirectory inDomains:NSUserDomainMask].firstObject;
+    NSURL *dir = [base URLByAppendingPathComponent:@"FieldReports" isDirectory:YES];
+    [[NSFileManager defaultManager] createDirectoryAtURL:dir withIntermediateDirectories:YES attributes:nil error:nil];
+    return [dir URLByAppendingPathComponent:name];
+}
+
+- (NSString *)nextReportNumber {
+    NSDateFormatter *df = [[NSDateFormatter alloc] init];
+    df.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+    df.dateFormat = @"yyyyMMdd";
+    NSString *prefix = [NSString stringWithFormat:@"FR-%@-", [df stringFromDate:[NSDate date]]];
+    NSInteger next = 1;
+    for (NSManagedObject *r in [self fetch:@"FieldReport" predicate:[NSPredicate predicateWithFormat:@"number BEGINSWITH %@", prefix] sort:nil]) {
+        NSInteger n = [[[r valueForKey:@"number"] substringFromIndex:prefix.length] integerValue];
+        next = MAX(next, n + 1);
+    }
+    NSString *num;
+    // Loop guards against a number the user typed by hand.
+    do { num = [NSString stringWithFormat:@"%@%03ld", prefix, (long)next++]; } while ([self isReportNumberTaken:num excluding:nil]);
+    return num;
+}
+
+- (BOOL)isReportNumberTaken:(NSString *)number excluding:(NSManagedObject *)report {
+    NSPredicate *p = [NSPredicate predicateWithFormat:@"number ==[c] %@", number];
+    for (NSManagedObject *o in [self fetch:@"FieldReport" predicate:p sort:nil]) {
+        if (!report || ![o.objectID isEqual:report.objectID]) return YES;
+    }
+    return NO;
+}
+
+#pragma mark - Library categories
+
+- (NSArray<NSManagedObject *> *)categories {
+    NSArray *sort = @[[NSSortDescriptor sortDescriptorWithKey:@"sortIndex" ascending:YES],
+                      [NSSortDescriptor sortDescriptorWithKey:@"createdAt" ascending:YES]];
+    NSArray *all = [self fetch:@"Category" predicate:nil sort:sort];
+    if (all.count) return all;
+    // First use: create the built-in categories once. They are real, editable records.
+    NSArray *keys = @[@"libcat.manuals", @"libcat.guides", @"libcat.reference", @"libcat.safety", @"libcat.notes", @"libcat.other"];
+    [keys enumerateObjectsUsingBlock:^(NSString *k, NSUInteger i, BOOL *stop) {
+        NSManagedObject *c = [self insert:@"Category" inContext:nil];
+        [c setValue:k forKey:@"builtinKey"];
+        [c setValue:@(i) forKey:@"sortIndex"];
+    }];
+    if (![self save:nil]) { [self.context rollback]; return @[]; }
+    return [self fetch:@"Category" predicate:nil sort:sort];
+}
+
+- (NSString *)categoryName:(NSManagedObject *)category {
+    if (!category) return QL(@"lib.uncategorized");
+    NSString *n = [QQXTheme trim:[category valueForKey:@"name"]];
+    if (n.length) return n;
+    NSString *k = [category valueForKey:@"builtinKey"];
+    return k.length ? QL(k) : QL(@"lib.uncategorized");
 }
 
 #pragma mark - Calculation history
@@ -234,16 +346,22 @@
     root[@"app"] = @"QQXForgeKit";
     root[@"format"] = @"qqx-backup-1";
     root[@"exportedAt"] = [self jsonValue:[NSDate date]];
-    for (NSString *entity in @[@"Equipment", @"MaintenanceRecord", @"Inspection", @"InspectionItem", @"CalcRecord"]) {
+    for (NSString *entity in @[@"Equipment", @"MaintenanceRecord", @"Inspection", @"InspectionItem", @"CalcRecord",
+                               @"Category", @"Document", @"FieldReport", @"ReportPhoto", @"ReportMeasurement"]) {
         NSMutableArray *rows = [NSMutableArray array];
         for (NSManagedObject *o in [self fetch:entity predicate:nil sort:@[[NSSortDescriptor sortDescriptorWithKey:@"createdAt" ascending:YES]]]) {
             NSMutableDictionary *row = [NSMutableDictionary dictionary];
             for (NSString *key in o.entity.attributesByName) row[key] = [self jsonValue:[o valueForKey:key]];
-            // To-one relationships are exported as the related record's uid.
+            // To-one relationships are exported as the related record's uid; many-to-many links
+            // (document↔equipment, field report↔inspections/maintenance) as uid arrays.
             [o.entity.relationshipsByName enumerateKeysAndObjectsUsingBlock:^(NSString *name, NSRelationshipDescription *rel, BOOL *stop) {
-                if (rel.isToMany) return;
-                NSManagedObject *t = [o valueForKey:name];
-                row[[name stringByAppendingString:@"Uid"]] = t ? [t valueForKey:@"uid"] : [NSNull null];
+                if (!rel.isToMany) {
+                    NSManagedObject *t = [o valueForKey:name];
+                    row[[name stringByAppendingString:@"Uid"]] = t ? [t valueForKey:@"uid"] : [NSNull null];
+                } else if (rel.inverseRelationship.isToMany) {
+                    NSSet *uids = [[o valueForKey:name] valueForKey:@"uid"];
+                    row[[name stringByAppendingString:@"Uids"]] = uids.allObjects ?: @[];
+                }
             }];
             [rows addObject:row];
         }
@@ -260,8 +378,10 @@
     [fm removeItemAtURL:tmp error:nil];
     NSURL *folder = [tmp URLByAppendingPathComponent:base isDirectory:YES];
     NSURL *photos = [folder URLByAppendingPathComponent:@"Photos" isDirectory:YES];
+    NSURL *library = [folder URLByAppendingPathComponent:@"Library" isDirectory:YES];
     NSError *e = nil;
     BOOL ok = json && [fm createDirectoryAtURL:photos withIntermediateDirectories:YES attributes:nil error:&e]
+                   && [fm createDirectoryAtURL:library withIntermediateDirectories:YES attributes:nil error:&e]
                    && [json writeToURL:[folder URLByAppendingPathComponent:@"data.json"] options:NSDataWritingAtomic error:&e];
     if (ok) {
         // Only photos that records still reference; data.json stores the same file names.
@@ -269,6 +389,16 @@
             NSURL *src = [[self photoDir] URLByAppendingPathComponent:name];
             if ([fm fileExistsAtPath:src.path]) {
                 ok = [fm copyItemAtURL:src toURL:[photos URLByAppendingPathComponent:name] error:&e];
+                if (!ok) break;
+            }
+        }
+    }
+    if (ok) {
+        // Imported library files; Document.file holds the same names.
+        for (NSManagedObject *d in [self fetch:@"Document" predicate:[NSPredicate predicateWithFormat:@"file != nil"] sort:nil]) {
+            NSURL *src = [self libraryFileURL:[d valueForKey:@"file"]];
+            if (src && [fm fileExistsAtPath:src.path]) {
+                ok = [fm copyItemAtURL:src toURL:[library URLByAppendingPathComponent:src.lastPathComponent] error:&e];
                 if (!ok) break;
             }
         }

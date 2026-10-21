@@ -119,6 +119,13 @@
     [self.navigationController pushViewController:[[QQXHistoryViewController alloc] init] animated:YES];
 }
 
+- (void)selectTool:(NSInteger)tool {
+    [self loadViewIfNeeded];
+    if (tool < 0 || tool > 2) return;
+    self.toolSegment.selectedSegmentIndex = tool;
+    [self toolChanged];
+}
+
 - (void)toolChanged {
     for (UIView *v in self.panel.arrangedSubviews) [v removeFromSuperview];
     switch (self.toolSegment.selectedSegmentIndex) {

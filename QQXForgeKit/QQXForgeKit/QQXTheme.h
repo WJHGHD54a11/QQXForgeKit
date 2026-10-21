@@ -6,6 +6,7 @@
 //
 
 #import <UIKit/UIKit.h>
+#import <CoreData/CoreData.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -36,12 +37,30 @@ typedef NS_ENUM(NSInteger, QQXInspectionStatus) {
     QQXInspectionStatusComplete = 1,
 };
 
+/// Field report content status (FieldReport.status). Export state is tracked separately (exportedAt).
+typedef NS_ENUM(NSInteger, QQXReportStatus) {
+    QQXReportStatusDraft = 0,
+    QQXReportStatusCompleted = 1,
+};
+
+/// Technical library item kinds (Document.kind).
+typedef NS_ENUM(NSInteger, QQXDocKind) {
+    QQXDocKindPDF = 0,
+    QQXDocKindImage,
+    QQXDocKindNote,
+    QQXDocKindFormula,
+};
+
 @interface QQXTheme : NSObject
 
 + (UIColor *)bg;
 + (UIColor *)card;
 + (UIColor *)field;
 + (UIColor *)line;
+/// Soft mint used for the title area and header blocks.
++ (UIColor *)mint;
+/// Mint green fill for primary buttons and switches (dark text on top).
++ (UIColor *)accentFill;
 + (UIColor *)accent;
 + (UIColor *)amber;
 + (UIColor *)red;
@@ -84,6 +103,16 @@ typedef NS_ENUM(NSInteger, QQXInspectionStatus) {
 + (UIColor *)resultColor:(NSInteger)result;
 + (NSString *)inspectionStatusText:(NSInteger)status;
 + (UIColor *)inspectionStatusColor:(NSInteger)status;
+/// "Draft" / "Completed" / "Exported" — Exported only while the saved PDF matches the current content.
++ (NSString *)fieldReportStatusText:(NSInteger)status;
+/// YES when a PDF exists and was written after the last content change.
++ (BOOL)fieldReportExportCurrent:(NSManagedObject *)report;
++ (NSString *)fieldReportStateText:(NSManagedObject *)report;
++ (UIColor *)fieldReportStateColor:(NSManagedObject *)report;
++ (NSString *)docKindText:(NSInteger)kind;
++ (NSString *)docKindIcon:(NSInteger)kind;
+/// Mint title block for list screens: big title, subtitle line, optional stat chips.
++ (UIView *)headerWithTitle:(nullable NSString *)title subtitle:(nullable NSString *)subtitle stats:(nullable NSArray<NSString *> *)stats width:(CGFloat)width;
 + (NSArray<NSString *> *)maintenanceCategoryTitles;
 + (NSString *)maintenanceCategoryText:(NSInteger)category;
 

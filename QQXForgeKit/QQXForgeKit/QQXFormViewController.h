@@ -20,6 +20,7 @@ typedef NS_ENUM(NSInteger, QQXFieldType) {
     QQXFieldChoice,        // stores the option index (NSNumber)
     QQXFieldSwitch,
     QQXFieldPhoto,         // stores the photo file name
+    QQXFieldDateTime,      // date + time of day
 };
 
 // Field spec keys.
@@ -38,6 +39,8 @@ extern NSString * const QQXFHint;         // NSString shown under the control
 
 @property (nonatomic, readonly, nullable) NSManagedObject *object;
 @property (nonatomic, copy, nullable) NSManagedObject * (^makeObject)(void);
+/// Choice fields bound to a to-one relationship: key -> objects aligned with QQXFOptions (NSNull = none).
+@property (nonatomic, copy, nullable) NSDictionary<NSString *, NSArray *> *choiceObjects;
 /// Initial values for create mode (attribute key -> value).
 @property (nonatomic, copy, nullable) NSDictionary<NSString *, id> *initialValues;
 

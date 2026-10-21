@@ -118,8 +118,10 @@ NSString * const QQXFHint = @"hint";
             control = t;
             break;
         }
-        case QQXFieldDate: {
+        case QQXFieldDate:
+        case QQXFieldDateTime: {
             UIDatePicker *d = [self datePicker];
+            if (type == QQXFieldDateTime) d.datePickerMode = UIDatePickerModeDateAndTime;
             d.date = value ?: [NSDate date];
             control = d;
             break;
@@ -144,7 +146,8 @@ NSString * const QQXFHint = @"hint";
         }
         case QQXFieldChoice: {
             NSArray *opts = f[QQXFOptions];
-            NSInteger idx = [value integerValue];
+            NSArray *objs = self.choiceObjects[key];
+            NSInteger idx = objs ? (NSInteger)[objs indexOfObject:value ?: [NSNull null]] : [value integerValue];
             if (idx < 0 || idx >= (NSInteger)opts.count) idx = 0;
             self.choices[key] = @(idx);
             control = [self choiceButtonForKey:key options:opts];
@@ -336,14 +339,18 @@ NSString * const QQXFHint = @"hint";
                 break;
             }
             case QQXFieldDate:
+            case QQXFieldDateTime:
                 value = ((UIDatePicker *)self.controls[key]).date;
                 break;
             case QQXFieldOptionalDate:
                 if (((UISwitch *)self.controls[[key stringByAppendingString:@".switch"]]).isOn) value = ((UIDatePicker *)self.controls[key]).date;
                 break;
-            case QQXFieldChoice:
-                value = self.choices[key] ?: @0;
+            case QQXFieldChoice: {
+                NSInteger idx = [self.choices[key] integerValue];
+                NSArray *objs = self.choiceObjects[key];
+                value = objs ? (idx < (NSInteger)objs.count ? objs[idx] : [NSNull null]) : @(idx);
                 break;
+            }
             case QQXFieldSwitch:
                 value = @(((UISwitch *)self.controls[key]).isOn);
                 break;

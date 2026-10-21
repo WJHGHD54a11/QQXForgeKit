@@ -15,22 +15,25 @@ static UIColor *QQXHex(uint32_t rgb) {
 
 @implementation QQXTheme
 
-+ (UIColor *)bg     { return QQXHex(0x0E1013); }
-+ (UIColor *)card   { return QQXHex(0x181B20); }
-+ (UIColor *)field  { return QQXHex(0x22262D); }
-+ (UIColor *)line   { return QQXHex(0x2E333B); }
-+ (UIColor *)accent { return QQXHex(0x22D3EE); }
-+ (UIColor *)amber  { return QQXHex(0xF5A524); }
-+ (UIColor *)red    { return QQXHex(0xF0616D); }
-+ (UIColor *)green  { return QQXHex(0x4ADE80); }
-+ (UIColor *)text   { return QQXHex(0xE8EAED); }
-+ (UIColor *)text2  { return QQXHex(0x8F96A1); }
+// Light mint palette. Text-weight colours are slightly deeper than the fills so they stay readable on white.
++ (UIColor *)bg         { return QQXHex(0xF7F9F6); }
++ (UIColor *)card       { return QQXHex(0xFFFFFF); }
++ (UIColor *)field      { return QQXHex(0xF2F4F1); }
++ (UIColor *)line       { return QQXHex(0xEEEEEE); }
++ (UIColor *)mint       { return QQXHex(0xE3F8DF); }
++ (UIColor *)accentFill { return QQXHex(0x43D85B); }
++ (UIColor *)accent     { return QQXHex(0x1E9A35); }
++ (UIColor *)amber      { return QQXHex(0xC9821E); }
++ (UIColor *)red        { return QQXHex(0xD9473F); }
++ (UIColor *)green      { return QQXHex(0x1E9A35); }
++ (UIColor *)text       { return QQXHex(0x171717); }
++ (UIColor *)text2      { return QQXHex(0x858585); }
 
 + (void)applyAppearance {
     UINavigationBarAppearance *nav = [[UINavigationBarAppearance alloc] init];
     [nav configureWithOpaqueBackground];
-    nav.backgroundColor = [self bg];
-    nav.shadowColor = [self line];
+    nav.backgroundColor = [self mint];
+    nav.shadowColor = [UIColor clearColor];
     nav.titleTextAttributes = @{NSForegroundColorAttributeName: [self text]};
     nav.largeTitleTextAttributes = @{NSForegroundColorAttributeName: [self text]};
     UINavigationBar *bar = [UINavigationBar appearance];
@@ -41,7 +44,7 @@ static UIColor *QQXHex(uint32_t rgb) {
 
     UITabBarAppearance *tab = [[UITabBarAppearance alloc] init];
     [tab configureWithOpaqueBackground];
-    tab.backgroundColor = [self bg];
+    tab.backgroundColor = [self card];
     tab.shadowColor = [self line];
     UITabBar *tb = [UITabBar appearance];
     tb.standardAppearance = tab;
@@ -49,10 +52,10 @@ static UIColor *QQXHex(uint32_t rgb) {
     tb.tintColor = [self accent];
     tb.unselectedItemTintColor = [self text2];
 
-    [UISegmentedControl appearance].selectedSegmentTintColor = [self accent];
-    [[UISegmentedControl appearance] setTitleTextAttributes:@{NSForegroundColorAttributeName: [self bg]} forState:UIControlStateSelected];
+    [UISegmentedControl appearance].selectedSegmentTintColor = [self card];
+    [[UISegmentedControl appearance] setTitleTextAttributes:@{NSForegroundColorAttributeName: [self text]} forState:UIControlStateSelected];
     [[UISegmentedControl appearance] setTitleTextAttributes:@{NSForegroundColorAttributeName: [self text]} forState:UIControlStateNormal];
-    [UISwitch appearance].onTintColor = [self accent];
+    [UISwitch appearance].onTintColor = [self accentFill];
 }
 
 #pragma mark - Factories
@@ -72,13 +75,11 @@ static UIColor *QQXHex(uint32_t rgb) {
     f.textColor = [self text];
     f.tintColor = [self accent];
     f.font = [UIFont systemFontOfSize:16];
-    f.layer.cornerRadius = 8;
-    f.layer.borderWidth = 1;
-    f.layer.borderColor = [self line].CGColor;
+    f.layer.cornerRadius = 10;
     f.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 12, 1)];
     f.leftViewMode = UITextFieldViewModeAlways;
     f.clearButtonMode = UITextFieldViewModeWhileEditing;
-    f.keyboardAppearance = UIKeyboardAppearanceDark;
+    f.keyboardAppearance = UIKeyboardAppearanceDefault;
     if (placeholder) {
         f.attributedPlaceholder = [[NSAttributedString alloc] initWithString:placeholder
                                                                   attributes:@{NSForegroundColorAttributeName: [self text2]}];
@@ -93,12 +94,10 @@ static UIColor *QQXHex(uint32_t rgb) {
     t.textColor = [self text];
     t.tintColor = [self accent];
     t.font = [UIFont systemFontOfSize:16];
-    t.layer.cornerRadius = 8;
-    t.layer.borderWidth = 1;
-    t.layer.borderColor = [self line].CGColor;
+    t.layer.cornerRadius = 10;
     t.textContainerInset = UIEdgeInsetsMake(10, 8, 10, 8);
     t.scrollEnabled = NO;
-    t.keyboardAppearance = UIKeyboardAppearanceDark;
+    t.keyboardAppearance = UIKeyboardAppearanceDefault;
     [t.heightAnchor constraintGreaterThanOrEqualToConstant:80].active = YES;
     return t;
 }
@@ -108,8 +107,8 @@ static UIColor *QQXHex(uint32_t rgb) {
     switch (style) {
         case QQXButtonStylePrimary:
             c = [UIButtonConfiguration filledButtonConfiguration];
-            c.baseBackgroundColor = [self accent];
-            c.baseForegroundColor = [self bg];
+            c.baseBackgroundColor = [self accentFill];
+            c.baseForegroundColor = [self text];
             break;
         case QQXButtonStyleSecondary:
             c = [UIButtonConfiguration grayButtonConfiguration];
@@ -137,9 +136,7 @@ static UIColor *QQXHex(uint32_t rgb) {
 + (UIView *)cardView {
     UIView *v = [[UIView alloc] init];
     v.backgroundColor = [self card];
-    v.layer.cornerRadius = 12;
-    v.layer.borderWidth = 1;
-    v.layer.borderColor = [self line].CGColor;
+    v.layer.cornerRadius = 16;
     return v;
 }
 
@@ -372,6 +369,96 @@ static UIColor *QQXHex(uint32_t rgb) {
 
 + (UIColor *)inspectionStatusColor:(NSInteger)status {
     return status == QQXInspectionStatusComplete ? [self green] : [self amber];
+}
+
++ (NSString *)fieldReportStatusText:(NSInteger)status {
+    return status == QQXReportStatusCompleted ? QL(@"fr.status.completed") : QL(@"fr.status.draft");
+}
+
+/// Exported means a PDF exists and was written after the last content change.
++ (BOOL)fieldReportExportCurrent:(NSManagedObject *)r {
+    NSDate *exp = [r valueForKey:@"exportedAt"], *upd = [r valueForKey:@"updatedAt"];
+    return exp && [[r valueForKey:@"pdfFile"] length] && (!upd || [exp compare:upd] != NSOrderedAscending);
+}
+
++ (NSString *)fieldReportStateText:(NSManagedObject *)r {
+    if ([self fieldReportExportCurrent:r]) return QL(@"fr.status.exported");
+    NSString *base = [self fieldReportStatusText:[[r valueForKey:@"status"] integerValue]];
+    // Edited after an export: say so, so the user knows to regenerate.
+    if ([r valueForKey:@"exportedAt"]) return [NSString stringWithFormat:@"%@ · %@", base, QL(@"fr.status.updated")];
+    return base;
+}
+
++ (UIColor *)fieldReportStateColor:(NSManagedObject *)r {
+    if ([self fieldReportExportCurrent:r]) return [self accent];
+    if ([r valueForKey:@"exportedAt"]) return [self amber];
+    return [[r valueForKey:@"status"] integerValue] == QQXReportStatusCompleted ? [self accent] : [self amber];
+}
+
++ (NSString *)docKindText:(NSInteger)kind {
+    switch (kind) {
+        case QQXDocKindImage: return QL(@"doc.kind.image");
+        case QQXDocKindNote: return QL(@"doc.kind.note");
+        case QQXDocKindFormula: return QL(@"doc.kind.formula");
+        default: return QL(@"doc.kind.pdf");
+    }
+}
+
++ (NSString *)docKindIcon:(NSInteger)kind {
+    switch (kind) {
+        case QQXDocKindImage: return @"photo";
+        case QQXDocKindNote: return @"note.text";
+        case QQXDocKindFormula: return @"function";
+        default: return @"doc.text";
+    }
+}
+
++ (UIView *)headerWithTitle:(NSString *)title subtitle:(NSString *)subtitle stats:(NSArray<NSString *> *)stats width:(CGFloat)width {
+    UIView *wrap = [[UIView alloc] init];
+    wrap.backgroundColor = [self mint];
+    UIStackView *s = [[UIStackView alloc] init];
+    s.axis = UILayoutConstraintAxisVertical;
+    s.spacing = 6;
+    s.translatesAutoresizingMaskIntoConstraints = NO;
+    if (title.length) {
+        UILabel *t = [self labelWithSize:28 weight:UIFontWeightBold color:[self text]];
+        t.text = title;
+        t.accessibilityTraits = UIAccessibilityTraitHeader;
+        [s addArrangedSubview:t];
+    }
+    if (subtitle.length) {
+        UILabel *sub = [self labelWithSize:14 weight:UIFontWeightRegular color:[self text2]];
+        sub.text = subtitle;
+        [s addArrangedSubview:sub];
+    }
+    if (stats.count) {
+        UIStackView *row = [[UIStackView alloc] init];
+        row.spacing = 8;
+        row.distribution = UIStackViewDistributionFillEqually;
+        for (NSString *st in stats) {
+            UILabel *chip = [self labelWithSize:13 weight:UIFontWeightSemibold color:[self text]];
+            chip.text = st;
+            chip.textAlignment = NSTextAlignmentCenter;
+            chip.backgroundColor = [self card];
+            chip.layer.cornerRadius = 12;
+            chip.clipsToBounds = YES;
+            [chip.heightAnchor constraintGreaterThanOrEqualToConstant:36].active = YES;
+            [row addArrangedSubview:chip];
+        }
+        [s setCustomSpacing:12 afterView:s.arrangedSubviews.lastObject];
+        [s addArrangedSubview:row];
+    }
+    [wrap addSubview:s];
+    [NSLayoutConstraint activateConstraints:@[
+        [s.topAnchor constraintEqualToAnchor:wrap.topAnchor constant:8],
+        [s.leadingAnchor constraintEqualToAnchor:wrap.leadingAnchor constant:20],
+        [s.trailingAnchor constraintEqualToAnchor:wrap.trailingAnchor constant:-20],
+        [s.bottomAnchor constraintEqualToAnchor:wrap.bottomAnchor constant:-18],
+    ]];
+    CGSize size = [wrap systemLayoutSizeFittingSize:CGSizeMake(width, UILayoutFittingCompressedSize.height)
+                      withHorizontalFittingPriority:UILayoutPriorityRequired verticalFittingPriority:UILayoutPriorityFittingSizeLevel];
+    wrap.frame = CGRectMake(0, 0, width, size.height);
+    return wrap;
 }
 
 + (NSArray<NSString *> *)maintenanceCategoryTitles {

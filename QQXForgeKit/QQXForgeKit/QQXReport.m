@@ -97,17 +97,17 @@ static UIColor *RGB(CGFloat r, CGFloat g, CGFloat b) { return [UIColor colorWith
     [self.ctx beginPage];
     self.page += 1;
     // Header: brand mark + report title, identical on every page.
-    [RGB(14, 16, 19) setFill];
+    [RGB(227, 248, 223) setFill];
     UIRectFill(CGRectMake(0, 0, kPageW, kHeaderH));
-    [RGB(34, 211, 238) setFill];
+    [RGB(67, 216, 91) setFill];
     UIRectFill(CGRectMake(0, kHeaderH, kPageW, 2));
-    UIBezierPath *mark = [UIBezierPath bezierPathWithRoundedRect:CGRectMake(kMargin, 15, 24, 24) cornerRadius:5];
-    [mark fill];
-    [@"QX" drawInRect:CGRectMake(kMargin, 20, 24, 14) withAttributes:[self attrs:9 bold:YES color:RGB(14, 16, 19) align:NSTextAlignmentCenter]];
-    [@"QQXForgeKit" drawAtPoint:CGPointMake(kMargin + 32, 13) withAttributes:[self attrs:13 bold:YES color:UIColor.whiteColor align:NSTextAlignmentLeft]];
-    [self.headerTitle drawAtPoint:CGPointMake(kMargin + 32, 30) withAttributes:[self attrs:9 bold:NO color:RGB(180, 186, 194) align:NSTextAlignmentLeft]];
+    UIBezierPath *mark = [UIBezierPath bezierPathWithRoundedRect:CGRectMake(kMargin, 15, 24, 24) cornerRadius:6];
+    [mark fill];  // mint-green brand mark, fill colour set above
+    [@"QX" drawInRect:CGRectMake(kMargin, 20, 24, 14) withAttributes:[self attrs:9 bold:YES color:RGB(23, 23, 23) align:NSTextAlignmentCenter]];
+    [@"QQXForgeKit" drawAtPoint:CGPointMake(kMargin + 32, 13) withAttributes:[self attrs:13 bold:YES color:RGB(23, 23, 23) align:NSTextAlignmentLeft]];
+    [self.headerTitle drawAtPoint:CGPointMake(kMargin + 32, 30) withAttributes:[self attrs:9 bold:NO color:RGB(90, 96, 90) align:NSTextAlignmentLeft]];
     [self.generatedText drawInRect:CGRectMake(kPageW / 2, 30, kPageW / 2 - kMargin, 14)
-                    withAttributes:[self attrs:8 bold:NO color:RGB(180, 186, 194) align:NSTextAlignmentRight]];
+                    withAttributes:[self attrs:8 bold:NO color:RGB(90, 96, 90) align:NSTextAlignmentRight]];
     // Footer: page number. Total page count is unknown while streaming, so "Page n" is used.
     [RGB(210, 214, 220) setFill];
     UIRectFill(CGRectMake(kMargin, kPageH - kMargin - 14, [self contentW], 0.5));
@@ -193,7 +193,7 @@ static UIColor *RGB(CGFloat r, CGFloat g, CGFloat b) { return [UIColor colorWith
     self.y += 10;
     [title drawAtPoint:CGPointMake(kMargin, self.y) withAttributes:[self attrs:13 bold:YES color:[self ink] align:NSTextAlignmentLeft]];
     self.y += 20;
-    [RGB(34, 211, 238) setFill];
+    [RGB(67, 216, 91) setFill];
     UIRectFill(CGRectMake(kMargin, self.y, 36, 2));
     [RGB(220, 224, 229) setFill];
     UIRectFill(CGRectMake(kMargin + 36, self.y + 0.5, [self contentW] - 36, 1));
@@ -365,6 +365,194 @@ static UIColor *RGB(CGFloat r, CGFloat g, CGFloat b) { return [UIColor colorWith
              x:kMargin width:[self contentW] bar:nil];
     self.y += 14;
     [self flow:[self str:QL(@"pdf.disclaimer") size:8.5 bold:NO color:[self muted]] x:kMargin width:[self contentW] bar:nil];
+}
+
+#pragma mark - Field report
+
++ (NSArray<NSString *> *)missingDataForFieldReport:(NSManagedObject *)report {
+    NSMutableArray *m = [NSMutableArray array];
+    if (report.isDeleted || report.managedObjectContext == nil) { [m addObject:QL(@"pdf.err.deleted")]; return m; }
+    if (report.objectID.isTemporaryID || report.hasChanges) [m addObject:QL(@"fr.err.unsaved")];
+    if ([QQXTheme trim:[report valueForKey:@"title"]].length == 0) [m addObject:[NSString stringWithFormat:QL(@"err.required"), QL(@"fr.f.title")]];
+    if ([QQXTheme trim:[report valueForKey:@"number"]].length == 0) [m addObject:[NSString stringWithFormat:QL(@"err.required"), QL(@"fr.f.number")]];
+    return m;
+}
+
++ (BOOL)generateForFieldReport:(NSManagedObject *)report toURL:(NSURL *)url error:(NSString **)error {
+    NSArray *missing = [self missingDataForFieldReport:report];
+    if (missing.count) {
+        if (error) *error = [missing componentsJoinedByString:@"\n"];
+        return NO;
+    }
+    return [[[QQXReport alloc] init] renderField:report toURL:url error:error];
+}
+
+- (BOOL)renderField:(NSManagedObject *)r toURL:(NSURL *)url error:(NSString **)error {
+    NSString *number = [r valueForKey:@"number"];
+    self.headerTitle = [NSString stringWithFormat:@"%@ · %@", QL(@"fr.pdf.title"), number];
+    self.generatedText = [NSString stringWithFormat:@"%@: %@", QL(@"pdf.generated"), [QQXTheme dateTime:[NSDate date]]];
+    NSFileManager *fm = [NSFileManager defaultManager];
+    [fm createDirectoryAtURL:url.URLByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
+    // Render to a temporary file first so a failure never destroys the previously exported PDF.
+    NSURL *tmp = [fm.temporaryDirectory URLByAppendingPathComponent:[[NSUUID UUID].UUIDString stringByAppendingPathExtension:@"pdf"]];
+
+    UIGraphicsPDFRendererFormat *fmt = [UIGraphicsPDFRendererFormat defaultFormat];
+    fmt.documentInfo = @{(__bridge NSString *)kCGPDFContextTitle: self.headerTitle,
+                         (__bridge NSString *)kCGPDFContextCreator: @"QQXForgeKit"};
+    UIGraphicsPDFRenderer *renderer = [[UIGraphicsPDFRenderer alloc] initWithBounds:CGRectMake(0, 0, kPageW, kPageH) format:fmt];
+    NSError *e = nil;
+    BOOL ok = [renderer writePDFToURL:tmp withActions:^(UIGraphicsPDFRendererContext *c) {
+        self.ctx = c;
+        [self newPage];
+        [self drawFieldReport:r];
+    } error:&e];
+    self.ctx = nil;
+    NSDictionary *attrs = [fm attributesOfItemAtPath:tmp.path error:nil];
+    if (ok && [attrs fileSize] > 0) {
+        [fm removeItemAtURL:url error:nil];
+        ok = [fm moveItemAtURL:tmp toURL:url error:&e];
+    } else {
+        ok = NO;
+    }
+    [fm removeItemAtURL:tmp error:nil];
+    if (!ok) {
+        NSLog(@"[QQXReport] field PDF failed: %@", e);
+        if (error) *error = e.localizedDescription.length ? [NSString stringWithFormat:@"%@\n%@", QL(@"pdf.err.render"), e.localizedDescription]
+                                                          : QL(@"pdf.err.render");
+    }
+    return ok;
+}
+
+/// Heading + paragraph; empty text is shown as "Not provided" so nothing is invented.
+- (void)paragraph:(NSString *)title text:(NSString *)text {
+    NSString *t = [QQXTheme trim:text];
+    [self ensure:40];
+    [self flow:[self str:title size:10.5 bold:YES color:[self muted]] x:kMargin width:[self contentW] bar:nil];
+    self.y += 2;
+    [self flow:[self str:t.length ? t : QL(@"common.notProvided") size:10.5 bold:NO color:t.length ? [self ink] : [self muted]]
+             x:kMargin width:[self contentW] bar:nil];
+    self.y += 10;
+}
+
+- (void)drawFieldReport:(NSManagedObject *)r {
+    QQXStore *store = [QQXStore shared];
+    [self flow:[self str:[r valueForKey:@"title"] size:18 bold:YES color:[self ink]] x:kMargin width:[self contentW] bar:nil];
+    self.y += 8;
+
+    [self section:QL(@"fr.sec.info")];
+    [self row:QL(@"fr.f.number") value:[r valueForKey:@"number"] ?: @""];
+    [self row:QL(@"fr.f.date") value:[QQXTheme dateTime:[r valueForKey:@"date"]]];
+    NSString *loc = [QQXTheme trim:[r valueForKey:@"location"]];
+    [self row:QL(@"fr.f.location") value:loc.length ? loc : QL(@"common.notProvided")];
+    NSString *who = [QQXTheme trim:[r valueForKey:@"personnel"]];
+    [self row:QL(@"fr.f.personnel") value:who.length ? who : QL(@"common.notProvided")];
+    [self row:QL(@"f.status") value:[QQXTheme fieldReportStatusText:[[r valueForKey:@"status"] integerValue]]];
+    [self row:QL(@"pdf.generated") value:[QQXTheme dateTime:[NSDate date]]];
+
+    [self section:QL(@"fr.sec.equipment")];
+    NSManagedObject *eq = [r valueForKey:@"equipment"];
+    if (eq) {
+        [self row:QL(@"f.eqName") value:[eq valueForKey:@"name"] ?: @""];
+        [self row:QL(@"f.assetTag") value:[eq valueForKey:@"assetTag"] ?: @""];
+        for (NSArray *p in @[@[@"f.model", @"model"], @[@"f.location", @"location"], @[@"f.manufacturer", @"manufacturer"]]) {
+            NSString *v = [QQXTheme trim:[eq valueForKey:p[1]]];
+            if (v.length) [self row:QL(p[0]) value:v];
+        }
+    } else {
+        [self flow:[self str:QL(@"fr.noEquipment") size:10 bold:NO color:[self muted]] x:kMargin width:[self contentW] bar:nil];
+        self.y += 6;
+    }
+
+    NSArray *insps = [store sorted:[r valueForKey:@"inspections"] key:@"date" ascending:NO];
+    NSArray *maint = [store sorted:[r valueForKey:@"maintenanceRecords"] key:@"date" ascending:NO];
+    if (insps.count || maint.count) {
+        [self section:QL(@"fr.sec.references")];
+        [self flow:[self str:QL(@"fr.refNote") size:9 bold:NO color:[self muted]] x:kMargin width:[self contentW] bar:nil];
+        self.y += 6;
+        for (NSManagedObject *i in insps) {
+            NSMutableArray *lines = [NSMutableArray arrayWithObject:[NSString stringWithFormat:@"%@ · %@ · %@", [i valueForKey:@"title"] ?: @"",
+                                     [QQXTheme date:[i valueForKey:@"date"]], [QQXTheme inspectionStatusText:[[i valueForKey:@"status"] integerValue]]]];
+            for (NSManagedObject *it in [store sorted:[i valueForKey:@"items"] key:@"sortIndex" ascending:YES]) {
+                if ([[it valueForKey:@"result"] integerValue] != QQXItemResultFail) continue;
+                NSString *n = [QQXTheme trim:[it valueForKey:@"notes"]];
+                [lines addObject:[NSString stringWithFormat:@"%@: %@%@", QL(@"result.fail"), [it valueForKey:@"text"] ?: @"", n.length ? [@" — " stringByAppendingString:n] : @""]];
+            }
+            [self ensure:30];
+            [self flow:[self pair:QL(@"fr.ref.inspection") value:[lines componentsJoinedByString:@"\n"]] x:kMargin + 12 width:[self contentW] - 12
+                   bar:RGB(67, 216, 91)];
+            self.y += 8;
+        }
+        for (NSManagedObject *m in maint) {
+            NSMutableArray *lines = [NSMutableArray arrayWithObject:[NSString stringWithFormat:@"%@ · %@", [QQXTheme date:[m valueForKey:@"date"]],
+                                     [QQXTheme maintenanceCategoryText:[[m valueForKey:@"category"] integerValue]]]];
+            for (NSArray *p in @[@[@"f.symptom", @"symptom"], @[@"f.workDone", @"workDone"]]) {
+                NSString *v = [QQXTheme trim:[m valueForKey:p[1]]];
+                if (v.length) [lines addObject:[NSString stringWithFormat:@"%@: %@", QL(p[0]), v]];
+            }
+            NSString *mv = [QQXTheme trim:[m valueForKey:@"measureValue"]];
+            if (mv.length) [lines addObject:[NSString stringWithFormat:@"%@: %@ %@", QL(@"f.measurement"), mv, [QQXTheme trim:[m valueForKey:@"measureUnit"]]]];
+            [self ensure:30];
+            [self flow:[self pair:QL(@"fr.ref.maintenance") value:[lines componentsJoinedByString:@"\n"]] x:kMargin + 12 width:[self contentW] - 12
+                   bar:RGB(67, 216, 91)];
+            self.y += 8;
+        }
+    }
+
+    [self section:QL(@"fr.sec.work")];
+    [self paragraph:QL(@"fr.f.purpose") text:[r valueForKey:@"purpose"]];
+    [self paragraph:QL(@"fr.f.conditions") text:[r valueForKey:@"conditions"]];
+    [self paragraph:QL(@"fr.f.process") text:[r valueForKey:@"process"]];
+
+    [self section:QL(@"fr.sec.findings")];
+    [self paragraph:QL(@"fr.f.findings") text:[r valueForKey:@"findings"]];
+
+    [self section:QL(@"fr.sec.measurements")];
+    NSArray *ms = [store sorted:[r valueForKey:@"measurements"] key:@"sortIndex" ascending:YES];
+    if (ms.count == 0) {
+        [self flow:[self str:QL(@"fr.noMeasurements") size:10 bold:NO color:[self muted]] x:kMargin width:[self contentW] bar:nil];
+        self.y += 6;
+    }
+    for (NSManagedObject *m in ms) {
+        NSString *v = [QQXTheme trim:[m valueForKey:@"value"]], *u = [QQXTheme trim:[m valueForKey:@"unit"]];
+        [self row:[m valueForKey:@"name"] ?: @"" value:u.length ? [NSString stringWithFormat:@"%@ %@", v, u] : v];
+    }
+
+    [self section:QL(@"fr.sec.actions")];
+    [self paragraph:QL(@"fr.f.actions") text:[r valueForKey:@"actions"]];
+
+    NSArray *photos = [store sorted:[r valueForKey:@"photos"] key:@"sortIndex" ascending:YES];
+    if (photos.count) {
+        [self section:QL(@"fr.sec.photos")];
+        [photos enumerateObjectsUsingBlock:^(NSManagedObject *ph, NSUInteger idx, BOOL *stop) {
+            UIImage *img = [store photoNamed:[ph valueForKey:@"photo"]];
+            NSString *cap = [QQXTheme trim:[ph valueForKey:@"caption"]];
+            NSString *label = [NSString stringWithFormat:QL(@"fr.photoN"), (long)idx + 1];
+            NSAttributedString *capStr = [self str:cap.length ? [NSString stringWithFormat:@"%@ — %@", label, cap] : label size:9.5 bold:NO color:[self muted]];
+            CGFloat capH = ceil([capStr boundingRectWithSize:CGSizeMake([self contentW], CGFLOAT_MAX) options:NSStringDrawingUsesLineFragmentOrigin context:nil].size.height);
+            if (!img) {
+                [self flow:[self str:[NSString stringWithFormat:@"%@ — %@", label, QL(@"pdf.photoMissing")] size:9.5 bold:NO color:[self resultColor:QQXItemResultPending]]
+                         x:kMargin width:[self contentW] bar:nil];
+                self.y += 8;
+                return;
+            }
+            // Aspect-fit inside the content width, never upscaled; keep the photo and its caption on one page.
+            CGFloat maxW = [self contentW], maxH = 300;
+            CGFloat sc = MIN(1.0, MIN(maxW / img.size.width, maxH / img.size.height));
+            CGSize ps = CGSizeMake(floor(img.size.width * sc), floor(img.size.height * sc));
+            [self ensure:ps.height + capH + 14];
+            [img drawInRect:CGRectMake(kMargin, self.y, ps.width, ps.height)];
+            self.y += ps.height + 4;
+            [self flow:capStr x:kMargin width:[self contentW] bar:nil];
+            self.y += 12;
+        }];
+    }
+
+    [self section:QL(@"fr.sec.recommendations")];
+    [self paragraph:QL(@"fr.f.recommendations") text:[r valueForKey:@"recommendations"]];
+    [self section:QL(@"fr.sec.summary")];
+    [self paragraph:QL(@"fr.f.summary") text:[r valueForKey:@"summary"]];
+    self.y += 6;
+    [self flow:[self str:QL(@"fr.pdf.disclaimer") size:8.5 bold:NO color:[self muted]] x:kMargin width:[self contentW] bar:nil];
 }
 
 @end

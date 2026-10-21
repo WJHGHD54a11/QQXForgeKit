@@ -81,7 +81,8 @@ typedef NS_ENUM(NSInteger, QQXSettingsSection) {
         case QQXSettingsSectionData:
             if (indexPath.row == 0) {
                 c.textLabel.text = [NSString stringWithFormat:QL(@"settings.counts"), (long)[self count:@"Equipment"], (long)[self count:@"MaintenanceRecord"],
-                                    (long)[self count:@"Inspection"], (long)[self count:@"CalcRecord"]];
+                                    (long)[self count:@"Inspection"], (long)[self count:@"CalcRecord"],
+                                    (long)[self count:@"Document"], (long)[self count:@"FieldReport"]];
                 c.textLabel.font = [UIFont systemFontOfSize:14];
                 c.detailTextLabel.text = QL(@"settings.storedLocally");
                 c.selectionStyle = UITableViewCellSelectionStyleNone;

@@ -36,8 +36,7 @@ static NSString * const kSortKey = @"qqx.equipment.sort";
     self.search.searchResultsUpdater = self;
     self.search.obscuresBackgroundDuringPresentation = NO;
     self.search.searchBar.placeholder = QL(@"equip.searchPlaceholder");
-    self.search.searchBar.keyboardAppearance = UIKeyboardAppearanceDark;
-    self.navigationItem.searchController = self.search;
+        self.navigationItem.searchController = self.search;
     self.navigationItem.hidesSearchBarWhenScrolling = NO;
     self.definesPresentationContext = YES;
 
@@ -53,6 +52,7 @@ static NSString * const kSortKey = @"qqx.equipment.sort";
     // tableHeaderView does not self-size; give it an explicit frame.
     UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 52)];
     header.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    header.backgroundColor = [QQXTheme mint];
     self.filter.translatesAutoresizingMaskIntoConstraints = NO;
     [header addSubview:self.filter];
     [NSLayoutConstraint activateConstraints:@[

@@ -47,6 +47,23 @@ NS_ASSUME_NONNULL_BEGIN
 /// Removes photo files that no record references (e.g. edits that were discarded).
 - (void)sweepOrphanPhotos;
 
+#pragma mark Technical library
+- (nullable NSURL *)libraryFileURL:(nullable NSString *)name;
+/// Copies a picked file into the app's Library folder; returns the stored file name.
+- (nullable NSString *)importLibraryFile:(NSURL *)source error:(NSString * _Nullable * _Nullable)error;
+- (void)removeLibraryFileIfUnused:(nullable NSString *)name;
+/// All categories in display order; the built-in set is created on first use.
+- (NSArray<NSManagedObject *> *)categories;
+/// User-entered name, else the localized built-in name.
+- (NSString *)categoryName:(nullable NSManagedObject *)category;
+
+#pragma mark Field reports
+/// App-internal location of a field report's latest PDF.
+- (NSURL *)reportPDFURL:(NSString *)name;
+/// Next free number in the form FR-yyyyMMdd-001.
+- (NSString *)nextReportNumber;
+- (BOOL)isReportNumberTaken:(NSString *)number excluding:(nullable NSManagedObject *)report;
+
 #pragma mark Calculation history
 - (BOOL)addCalcWithTool:(NSString *)tool
                category:(NSString *)category

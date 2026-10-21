@@ -6,6 +6,8 @@
 #import "QQXEquipmentDetailViewController.h"
 #import "QQXFormViewController.h"
 #import "QQXInspectionEditorViewController.h"
+#import "QQXDocumentViewController.h"
+#import "QQXFieldReportEditorViewController.h"
 #import "QQXTheme.h"
 #import "QQXLang.h"
 #import "QQXStore.h"
@@ -15,6 +17,8 @@ typedef NS_ENUM(NSInteger, QQXDetailSection) {
     QQXDetailSectionActions,
     QQXDetailSectionMaintenance,
     QQXDetailSectionInspections,
+    QQXDetailSectionDocuments,
+    QQXDetailSectionFieldReports,
 };
 
 @interface QQXEquipmentDetailViewController () <UISearchResultsUpdating>
@@ -23,6 +27,8 @@ typedef NS_ENUM(NSInteger, QQXDetailSection) {
 @property (nonatomic, copy) NSArray<NSArray<NSString *> *> *infoRows;
 @property (nonatomic, copy) NSArray<NSManagedObject *> *maintenance;
 @property (nonatomic, copy) NSArray<NSManagedObject *> *inspections;
+@property (nonatomic, copy) NSArray<NSManagedObject *> *documents;
+@property (nonatomic, copy) NSArray<NSManagedObject *> *fieldReports;
 @property (nonatomic) NSInteger maintenanceTotal;
 @property (nonatomic) BOOL oldestFirst;
 @property (nonatomic) NSInteger categoryFilter; // -1 = all
@@ -121,6 +127,9 @@ typedef NS_ENUM(NSInteger, QQXDetailSection) {
 + (void)confirmDelete:(NSManagedObject *)equipment from:(UIViewController *)host completion:(void (^)(void))completion {
     NSUInteger m = [[equipment valueForKey:@"maintenance"] count], i = [[equipment valueForKey:@"inspections"] count];
     NSString *msg = (m + i) ? [NSString stringWithFormat:QL(@"equip.deleteMsgLinked"), (long)m, (long)i] : QL(@"equip.deleteMsg");
+    NSUInteger d = [[equipment valueForKey:@"documents"] count], r = [[equipment valueForKey:@"fieldReports"] count];
+    // Library items and field reports are only unlinked (Nullify), never deleted with the equipment.
+    if (d + r) msg = [msg stringByAppendingFormat:@"\n\n%@", [NSString stringWithFormat:QL(@"equip.deleteKeeps"), (long)d, (long)r]];
     [QQXTheme confirmIn:host title:[NSString stringWithFormat:QL(@"equip.deleteTitle"), [equipment valueForKey:@"name"] ?: @""]
                 message:msg action:QL(@"common.delete") destructive:YES handler:^{
         NSString *err = nil;
@@ -152,8 +161,7 @@ typedef NS_ENUM(NSInteger, QQXDetailSection) {
     self.search.searchResultsUpdater = self;
     self.search.obscuresBackgroundDuringPresentation = NO;
     self.search.searchBar.placeholder = QL(@"maint.searchPlaceholder");
-    self.search.searchBar.keyboardAppearance = UIKeyboardAppearanceDark;
-    self.navigationItem.searchController = self.search;
+        self.navigationItem.searchController = self.search;
     self.definesPresentationContext = YES;
 }
 
@@ -228,6 +236,8 @@ typedef NS_ENUM(NSInteger, QQXDetailSection) {
     }
     self.maintenance = preds.count ? [allM filteredArrayUsingPredicate:[NSCompoundPredicate andPredicateWithSubpredicates:preds]] : allM;
     self.inspections = [[QQXStore shared] sorted:[e valueForKey:@"inspections"] key:@"date" ascending:NO];
+    self.documents = [[QQXStore shared] sorted:[e valueForKey:@"documents"] key:@"title" ascending:YES];
+    self.fieldReports = [[QQXStore shared] sorted:[e valueForKey:@"fieldReports"] key:@"date" ascending:NO];
     self.tableView.tableHeaderView = [self headerView];
     [self.tableView reloadData];
 }
@@ -328,7 +338,7 @@ typedef NS_ENUM(NSInteger, QQXDetailSection) {
 #pragma mark - Table
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return 4;
+    return 6;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
@@ -339,14 +349,18 @@ typedef NS_ENUM(NSInteger, QQXDetailSection) {
             return self.maintenance.count == self.maintenanceTotal
                 ? [NSString stringWithFormat:QL(@"equip.secMaint"), (long)self.maintenanceTotal]
                 : [NSString stringWithFormat:QL(@"equip.secMaintFiltered"), (long)self.maintenance.count, (long)self.maintenanceTotal];
-        default: return [NSString stringWithFormat:QL(@"equip.secInsp"), (long)self.inspections.count];
+        case QQXDetailSectionInspections: return [NSString stringWithFormat:QL(@"equip.secInsp"), (long)self.inspections.count];
+        case QQXDetailSectionDocuments: return [NSString stringWithFormat:QL(@"equip.secDocs"), (long)self.documents.count];
+        default: return [NSString stringWithFormat:QL(@"equip.secFR"), (long)self.fieldReports.count];
     }
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     switch (section) {
         case QQXDetailSectionInfo: return self.infoRows.count;
-        case QQXDetailSectionActions: return 3;
+        case QQXDetailSectionActions: return 4;
+        case QQXDetailSectionDocuments: return self.documents.count + 1;
+        case QQXDetailSectionFieldReports: return MAX(self.fieldReports.count, 1);
         case QQXDetailSectionMaintenance: return MAX(self.maintenance.count, 1);
         default: return MAX(self.inspections.count, 1);
     }
@@ -365,8 +379,8 @@ typedef NS_ENUM(NSInteger, QQXDetailSection) {
             return c;
         }
         case QQXDetailSectionActions: {
-            NSArray *titles = @[QL(@"equip.changeStatus"), QL(@"maint.new"), QL(@"insp.new")];
-            NSArray *icons = @[@"flag", @"wrench.and.screwdriver", @"checklist"];
+            NSArray *titles = @[QL(@"equip.changeStatus"), QL(@"maint.new"), QL(@"insp.new"), QL(@"fr.new")];
+            NSArray *icons = @[@"flag", @"wrench.and.screwdriver", @"checklist", @"doc.text.below.ecg"];
             c.textLabel.text = titles[indexPath.row];
             c.textLabel.textColor = [QQXTheme accent];
             c.detailTextLabel.text = indexPath.row == 0 ? [QQXTheme equipmentStatusText:[[self.equipment valueForKey:@"status"] integerValue]] : nil;
@@ -386,6 +400,34 @@ typedef NS_ENUM(NSInteger, QQXDetailSection) {
             if ([m valueForKey:@"sourceItem"]) [sub addObject:QL(@"maint.fromInspection")];
             c.detailTextLabel.text = [sub componentsJoinedByString:@" · "];
             c.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+            return c;
+        }
+        case QQXDetailSectionDocuments: {
+            if (indexPath.row == (NSInteger)self.documents.count) {
+                c.textLabel.text = QL(@"doc.linkDocs");
+                c.textLabel.textColor = [QQXTheme accent];
+                c.imageView.image = [UIImage systemImageNamed:@"link"];
+                c.imageView.tintColor = [QQXTheme accent];
+                c.detailTextLabel.text = nil;
+                return c;
+            }
+            NSManagedObject *d = self.documents[indexPath.row];
+            NSInteger k = [[d valueForKey:@"kind"] integerValue];
+            c.textLabel.text = [d valueForKey:@"title"];
+            c.detailTextLabel.text = [NSString stringWithFormat:@"%@ · %@", [QQXTheme docKindText:k], [[QQXStore shared] categoryName:[d valueForKey:@"category"]]];
+            c.imageView.image = [UIImage systemImageNamed:[QQXTheme docKindIcon:k]];
+            c.imageView.tintColor = [QQXTheme accent];
+            c.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+            return c;
+        }
+        case QQXDetailSectionFieldReports: {
+            if (self.fieldReports.count == 0) return [self emptyCell:c text:QL(@"fr.emptyForEquipment")];
+            NSManagedObject *r = self.fieldReports[indexPath.row];
+            c.textLabel.text = [r valueForKey:@"title"];
+            c.detailTextLabel.text = [NSString stringWithFormat:@"%@ · %@", [r valueForKey:@"number"] ?: @"", [QQXTheme date:[r valueForKey:@"date"]]];
+            UIButton *badge = [QQXTheme badgeWithText:[QQXTheme fieldReportStateText:r] color:[QQXTheme fieldReportStateColor:r]];
+            [badge sizeToFit];
+            c.accessoryView = badge;
             return c;
         }
         default: {
@@ -421,7 +463,16 @@ typedef NS_ENUM(NSInteger, QQXDetailSection) {
     if (indexPath.section == QQXDetailSectionActions) {
         if (indexPath.row == 0) [self changeStatus:[tableView cellForRowAtIndexPath:indexPath]];
         else if (indexPath.row == 1) [self addMaintenance];
-        else [self addInspection];
+        else if (indexPath.row == 2) [self addInspection];
+        else [QQXFieldReportEditorViewController presentWithReport:nil equipment:self.equipment from:self onClose:^{ [ws reload]; }];
+    } else if (indexPath.section == QQXDetailSectionDocuments) {
+        if (indexPath.row == (NSInteger)self.documents.count) {
+            [QQXDocumentViewController pickDocumentsForEquipment:self.equipment from:self completion:^{ [ws reload]; }];
+        } else {
+            [self.navigationController pushViewController:[[QQXDocumentViewController alloc] initWithDocument:self.documents[indexPath.row]] animated:YES];
+        }
+    } else if (indexPath.section == QQXDetailSectionFieldReports && self.fieldReports.count) {
+        [QQXFieldReportEditorViewController presentWithReport:self.fieldReports[indexPath.row] equipment:nil from:self onClose:^{ [ws reload]; }];
     } else if (indexPath.section == QQXDetailSectionMaintenance && self.maintenance.count) {
         QQXFormViewController *f = [QQXEquipmentDetailViewController maintenanceFormFor:self.maintenance[indexPath.row]
                                                                               equipment:self.equipment initialValues:nil sourceItem:nil];
@@ -447,6 +498,20 @@ typedef NS_ENUM(NSInteger, QQXDetailSection) {
             }];
         }];
         return [UISwipeActionsConfiguration configurationWithActions:@[del]];
+    }
+    if (indexPath.section == QQXDetailSectionDocuments && indexPath.row < (NSInteger)self.documents.count) {
+        NSManagedObject *d = self.documents[indexPath.row];
+        UIContextualAction *un = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive title:QL(@"doc.unlink")
+                                                                       handler:^(UIContextualAction *a, UIView *v, void (^done)(BOOL)) {
+            // Unlinking keeps the library item; only the association is removed.
+            [[ws.equipment mutableSetValueForKey:@"documents"] removeObject:d];
+            NSString *err = nil;
+            BOOL ok = [[QQXStore shared] save:&err];
+            if (!ok) { [[ws.equipment mutableSetValueForKey:@"documents"] addObject:d]; [QQXTheme alertIn:ws title:QL(@"common.error") message:err]; }
+            [ws reload];
+            done(ok);
+        }];
+        return [UISwipeActionsConfiguration configurationWithActions:@[un]];
     }
     if (indexPath.section == QQXDetailSectionInspections && self.inspections.count) {
         NSManagedObject *i = self.inspections[indexPath.row];
